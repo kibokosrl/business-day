@@ -21,8 +21,8 @@ class YearCrawler extends HolidaysList
          *
          * @return array
          */
-        return function ($year = null, $type = null, $self = null) {
-            $carbonClass = @get_class() ?: Emulator::getClass(new \Exception());
+        return static function ($year = null, $type = null, $self = null) {
+            $carbonClass = get_class(static::this());
             $next = $carbonClass::getYearHolidaysNextFunction($year, $type, $self);
             $holidays = [];
 
@@ -43,19 +43,18 @@ class YearCrawler extends HolidaysList
      */
     public function getYearHolidaysNextFunction()
     {
-        $mixin = $this;
-
         /**
          * Get a next() callback to call to iterate over holidays of a year.
          *
          * @param int    $year input year, year of the current instance or context used if omitted, current year used if omitted and called statically
          * @param string $type can be 'string' (to return dates as string) or a class name to returns instances of this class
          *
-         * @return \Closure
+         * @return callable
          */
-        return function ($year = null, $type = null, $self = null) use ($mixin) {
-            $carbonClass = @get_class() ?: Emulator::getClass(new \Exception());
-            $year = $year ?: $carbonClass::getThisOrToday($self, isset($this) && $this !== $mixin ? $this : null)->year;
+        return static function ($year = null, $type = null): callable {
+            $self = static::this();
+            $carbonClass = get_class($self);
+            $year = $year ?: $self->year;
             $holidays = $carbonClass::getHolidays();
             $outputClass = $type ? (is_string($type) && $type !== 'string' ? $type : 'DateTime') : $carbonClass;
             $holidaysList = [];
@@ -63,9 +62,7 @@ class YearCrawler extends HolidaysList
             $calculator->setOutputClass($outputClass);
             $calculator->setHolidaysList($holidaysList);
 
-            return function () use ($calculator) {
-                return $calculator->next();
-            };
+            return [$calculator, 'next'];
         };
     }
 }

@@ -5,6 +5,9 @@ namespace Types;
 use Carbon\Carbon;
 use Cmixin\BusinessDay;
 use ReflectionClass;
+use ReflectionException;
+use ReflectionFunction;
+use ReflectionMethod;
 use ReflectionParameter;
 
 class Generator
@@ -12,7 +15,7 @@ class Generator
     /**
      * @param callable|null $boot
      *
-     * @throws \ReflectionException
+     * @throws ReflectionException
      *
      * @return mixed
      */
@@ -34,7 +37,7 @@ class Generator
      * @param string        $source
      * @param string        $defaultClass
      *
-     * @throws \ReflectionException
+     * @throws ReflectionException
      *
      * @return string
      */
@@ -47,8 +50,8 @@ class Generator
 
         foreach ($this->getMethods($boot) as $name => $closure) {
             try {
-                $function = new \ReflectionFunction($closure);
-            } catch (\ReflectionException $e) {
+                $function = new ReflectionFunction($closure);
+            } catch (ReflectionException $e) {
                 continue;
             }
 
@@ -76,9 +79,9 @@ class Generator
                 if (preg_match('/^\s*(public|protected)\s+function\s+(\S+)\(.*\)(\s*\{)?$/', $code[$i], $match)) {
                     if ($name !== $match[2]) {
                         try {
-                            $method = new \ReflectionMethod($className, $name);
-                        } catch (\ReflectionException $e) {
-                            $method = new \ReflectionMethod($defaultClass, $name);
+                            $method = new ReflectionMethod($className, $name);
+                        } catch (ReflectionException $e) {
+                            $method = new ReflectionMethod($defaultClass, $name);
                         }
 
                         $methodFile = $method->getFileName();
@@ -89,6 +92,21 @@ class Generator
 
                         $length = $method->getEndLine() - 1;
                         $lines = $files[$methodFile];
+
+                        if ($length > 3 && preg_match('/^\s*\*+\/\s*$/', $lines[$length - 2])) {
+                            $doc = '';
+
+                            for ($i = $length - 2; $i >= max(0, $length - 42); $i--) {
+                                $doc = $lines[$i].$doc;
+
+                                if (preg_match('/\s*\/\*{2,}\s*/', $lines[$i])) {
+                                    $methodDocBlock = trim($doc);
+
+                                    break;
+                                }
+                            }
+                        }
+
                         $code = array_slice($lines, 0, $length);
 
                         for ($i = $length - 1; $i >= 0; $i--) {
@@ -136,7 +154,7 @@ class Generator
      * @param callable $boot
      * @param string   $name
      *
-     * @throws \ReflectionException
+     * @throws ReflectionException
      */
     public function writeHelpers($defaultClass, $source, $destination, $name = '_ide_business_day', callable $boot = null, array $classes = null)
     {
@@ -200,7 +218,7 @@ class Generator
             if ($parameter->isDefaultValueAvailable()) {
                 $output .= ' = '.$this->dumpValue($parameter->getDefaultValue());
             }
-        } catch (\ReflectionException $exp) {
+        } catch (ReflectionException $exp) {
         }
 
         return $output;

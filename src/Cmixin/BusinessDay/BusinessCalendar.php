@@ -2,8 +2,46 @@
 
 namespace Cmixin\BusinessDay;
 
+use Cmixin\BusinessDay\Calculator\MixinConfigPropagator;
+use SplObjectStorage;
+
 class BusinessCalendar extends HolidayObserver
 {
+    /**
+     * @var callable|null
+     */
+    public $businessDayChecker = null;
+
+    /**
+     * @var SplObjectStorage<object,callable>|null
+     */
+    public $businessDayCheckers = null;
+
+    /**
+     * Change the way to check if a date is a business day.
+     *
+     * @return \Closure
+     */
+    public function setBusinessDayChecker()
+    {
+        $mixin = $this;
+
+        /**
+         * Checks the date to see if it is a business day (neither a weekend day nor a holiday).
+         *
+         * @param callable|null $checkCallback
+         *
+         * @return $this|null
+         */
+        return static function (?callable $checkCallback = null) use ($mixin) {
+            return MixinConfigPropagator::setBusinessDayChecker(
+                $mixin,
+                end(static::$macroContextStack) ?: null,
+                $checkCallback
+            );
+        };
+    }
+
     /**
      * Checks the date to see if it is a business day (neither a weekend day nor a holiday).
      *
@@ -18,11 +56,14 @@ class BusinessCalendar extends HolidayObserver
          *
          * @return bool
          */
-        return function ($self = null) use ($mixin) {
-            $carbonClass = @get_class() ?: Emulator::getClass(new \Exception());
-
+        return static function () use ($mixin) {
             /** @var \Carbon\Carbon|\Cmixin\BusinessDay $self */
-            $self = $carbonClass::getThisOrToday($self, isset($this) && $this !== $mixin ? $this : null);
+            $self = static::this();
+            $businessDayChecker = MixinConfigPropagator::getBusinessDayChecker($mixin, $self);
+
+            if ($businessDayChecker) {
+                return $businessDayChecker($self);
+            }
 
             return $self->isWeekday() && !$self->isHoliday();
         };
@@ -42,16 +83,14 @@ class BusinessCalendar extends HolidayObserver
         /**
          * Sets the date to the next business day (neither a weekend day nor a holiday).
          *
-         * @return bool
+         * @return \Carbon\CarbonInterface|\Carbon\Carbon|\Carbon\CarbonImmutable
          */
-        return function ($self = null) use ($mixin, $method) {
-            $carbonClass = @get_class() ?: Emulator::getClass(new \Exception());
-
+        return static function () use ($mixin, $method) {
             /** @var static $self */
-            $self = $carbonClass::getThisOrToday($self, isset($this) && $this !== $mixin ? $this : null);
+            $self = static::this();
 
             do {
-                $self = $self->$method();
+                $self = MixinConfigPropagator::apply($mixin, $self, $method);
             } while (!$self->isBusinessDay());
 
             return $self;
@@ -67,17 +106,13 @@ class BusinessCalendar extends HolidayObserver
      */
     public function currentOrNextBusinessDay($method = 'nextBusinessDay')
     {
-        $mixin = $this;
-
         /**
          * Sets the date to the current or next business day (neither a weekend day nor a holiday).
          *
-         * @return bool
+         * @return \Carbon\CarbonInterface|\Carbon\Carbon|\Carbon\CarbonImmutable
          */
-        return function ($self = null) use ($mixin, $method) {
-            $carbonClass = @get_class() ?: Emulator::getClass(new \Exception());
-
-            $self = $carbonClass::getThisOrToday($self, isset($this) && $this !== $mixin ? $this : null);
+        return static function () use ($method) {
+            $self = static::this();
 
             return $self->isBusinessDay() ? $self : $self->$method();
         };
@@ -93,7 +128,7 @@ class BusinessCalendar extends HolidayObserver
         /**
          * Sets the date to the previous business day (neither a weekend day nor a holiday).
          *
-         * @return bool
+         * @return \Carbon\CarbonInterface|\Carbon\Carbon|\Carbon\CarbonImmutable
          */
         return $this->nextBusinessDay('subDay');
     }
@@ -108,7 +143,7 @@ class BusinessCalendar extends HolidayObserver
         /**
          * Sets the date to the current or previous business day.
          *
-         * @return bool
+         * @return \Carbon\CarbonInterface|\Carbon\Carbon|\Carbon\CarbonImmutable
          */
         return $this->currentOrNextBusinessDay('previousBusinessDay');
     }

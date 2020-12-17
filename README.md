@@ -3,7 +3,7 @@
 [Carbon](https://carbon.nesbot.com/) mixin to handle business days
 
 [![Latest Stable Version](https://poser.pugx.org/cmixin/business-day/v/stable.png)](https://packagist.org/packages/cmixin/business-day)
-[![Build Status](https://travis-ci.org/kylekatarnls/business-day.svg?branch=master)](https://travis-ci.org/kylekatarnls/business-day)
+[![GitHub Actions](https://github.com/kylekatarnls/business-day/workflows/Tests/badge.svg)](https://github.com/kylekatarnls/business-day/actions)
 [![Code Climate](https://codeclimate.com/github/kylekatarnls/business-day/badges/gpa.svg)](https://codeclimate.com/github/kylekatarnls/business-day)
 [![Test Coverage](https://codeclimate.com/github/kylekatarnls/business-day/badges/coverage.svg)](https://codeclimate.com/github/kylekatarnls/business-day/coverage)
 [![StyleCI](https://styleci.io/repos/129502391/shield?branch=master&style=flat)](https://styleci.io/repos/129502391)
@@ -309,6 +309,20 @@ Carbon::setHolidayName('christmas', 'en', 'Christmas Day');
 Carbon::parse('2018-12-25')->getHolidayName() // "Christmas Day"
 ```
 
+It also allows you to name an additional holiday you added manually and you can
+specify multiple languages using array:
+
+```php
+BusinessDay::enable('Carbon\Carbon', 'us-national', [
+  'company-creation' => '05-15',
+]);
+
+Carbon::setHolidayName('company-creation', [
+  'en' => 'The Day The Company Was Created',
+  'fr' => "Le jour de la création de l'Entreprise",
+]);
+```
+
 #### isBusinessDay
 
 Returns `true` if the date (Carbon instance) is nor a week-end day neither
@@ -542,6 +556,11 @@ echo "If you ask to leave from 2019-06-10 to 2019-06-18, it will cost to you $da
 // Note the ->endOfDay() to include the last day of the range
 ```
 
+⚠️ Behavior is different for Carbon 2 and 3:
+
+- Carbon <= 2 returns an absolute number (always positive).
+- Carbon >= 3 returns a negative number passed dare is before current date, positive else.
+
 #### getBusinessDaysInMonth
 
 Get the number of open days in the current/given month.
@@ -560,6 +579,93 @@ Get an array of Carbon objects for each open day in the current/given month.
 print_r(Carbon::getMonthBusinessDays()); // All open days in the current month
 print_r(Carbon::getMonthBusinessDays('2019-06')); // Open days in June 2019
 print_r(Carbon::parse('2019-06-10')->getMonthBusinessDays()); // Can be called from an instance
+```
+
+#### setBusinessDayChecker
+
+Customize the way to determine if a date is a business day or not.
+ 
+```php
+// Global way
+Carbon::setBusinessDayChecker(function (CarbonInterface $date) {
+    return $date->isWeekday()
+        && !$date->isHoliday()
+        || in_array($date->format('Y-m-d'), [
+            '2020-12-06', // Exceptional Sunday open day
+        ]);
+});
+
+// Single object config (prior to global)
+$date = Carbon::parse('2020-12-03');
+$date->setBusinessDayChecker($someFunction);
+```
+
+If not set or set to `null`, the default calculation is:
+```php
+$date->isWeekday() && !$date->isHoliday()
+```
+
+#### setHolidayGetter
+
+Customize the way to determine if a date is a holiday and which one it is.
+ 
+```php
+// Global way
+Carbon::setHolidayGetter(function (string $region, CarbonInterface $self, callable $fallback) {
+    [$country, $state] = explode('-', $region);
+    $date = $self->format('Y-m-d');
+
+    // Assuming the API you use does not support dates after 2040, you can fallback to the default internal data
+    if ($self->year > 2040) {
+        return $fallback();
+    }
+
+    $holidayData = file_get_contents("https://someholidaysapi.com/holidays/?country=$country&state=$state&date=$date");
+
+    return $holidayData
+        ? $holidayData['name'] // The function should return a unique string (like a name or an ID)
+        : false; // or false if the day is not a holiday
+});
+
+// Single object config (prior to global)
+$date = Carbon::parse('2020-12-03');
+$date->setHolidayGetter($someFunction);
+```
+
+#### setHolidayDataById
+
+Set an array of data for a given holiday ID.
+
+```php
+Carbon::setHolidayDataById('christmas', [
+    'info' => 'It may be cold in USA',
+]);
+```
+
+#### setHolidayData
+
+Set an array of data for current holiday (does nothing if the current day is not a holiday).
+
+```php
+Carbon::parse('2020-12-25')->setHolidayData([
+    'info' => 'It may be cold in USA',
+]);
+```
+
+#### getHolidayDataById
+
+Get stored array of data for a given holiday ID.
+
+```php
+Carbon::getHolidayDataById('christmas')
+```
+
+#### getHolidayData
+
+Get stored array of data for current holiday (`null` if the current day is not a holiday).
+
+```php
+Carbon::parse('2020-12-25')->getHolidayData()
 ```
 
 ### Laravel
